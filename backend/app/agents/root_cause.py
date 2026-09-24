@@ -10,6 +10,7 @@ against the real topology, and invented citations are dropped.
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
@@ -23,6 +24,8 @@ from app.agents import (
 )
 from app.llm.client import LLMClient, LLMError
 from app.llm.prompts import ROOT_CAUSE_SYSTEM, ROOT_CAUSE_USER
+
+logger = logging.getLogger("incident_sentinel.agents")
 
 AGENT_NAME = "root_cause"
 
@@ -187,13 +190,25 @@ def run(
         evidence=book.render(),
     )
 
+    # The fallback below is the least useful answer this agent can give, so
+    # record why it was reached -- a silent downgrade to onset ordering is
+    # indistinguishable from a confident diagnosis in the stored trace.
     try:
         response = llm.complete_json(system=ROOT_CAUSE_SYSTEM, user=user)
-    except LLMError:
+    except LLMError as exc:
+        logger.warning("%s: LLM call failed, using onset ordering instead: %s", AGENT_NAME, exc)
         response = {}
 
     candidates = _validate_candidates(response.get("candidates"), book, ctx.services())
     if not candidates:
+        if response:
+            logger.warning(
+                "%s: no candidate survived validation, using onset ordering instead "
+                "(response keys=%s, candidates=%r)",
+                AGENT_NAME,
+                sorted(response),
+                response.get("candidates"),
+            )
         candidates = _fallback_candidates(metric_output, book)
 
     top = candidates[0]

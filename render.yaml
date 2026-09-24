@@ -1,0 +1,47 @@
+# Render Blueprint: backend web service + PostgreSQL.
+#
+# Deploy: New → Blueprint → point at this repo. Then set the three `sync: false`
+# variables in the dashboard — they are secrets or depend on the frontend URL,
+# so they are deliberately not committed.
+#
+# Redis is not defined here: Render's managed Redis has no free tier, so the
+# cache lives on Upstash (free) and arrives via REDIS_URL. If REDIS_URL is
+# unset the app still runs — the cache degrades to in-memory and /health
+# reports `cache: down`.
+
+services:
+  - type: web
+    name: incident-sentinel-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+
+      - key: LLM_PROVIDER
+        value: groq # Ollama cannot run on the free instance size
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: incident-sentinel-db
+          property: connectionString
+
+      # Set in the dashboard.
+      - key: GROQ_API_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      # Must name the Vercel domain, e.g. https://incident-sentinel.vercel.app
+      # Development proxies /api through Vite so there is one origin; production
+      # has two, and this is what makes the browser accept the difference.
+      - key: CORS_ORIGINS
+        sync: false
+
+databases:
+  - name: incident-sentinel-db
+    plan: free # note: Render expires free databases after 30 days
+    databaseName: incident_sentinel
+    user: sentinel
