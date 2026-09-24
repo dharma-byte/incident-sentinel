@@ -27,5 +27,8 @@ EXPOSE 8000
 RUN useradd --create-home --uid 1000 sentinel && chown -R sentinel:sentinel /app
 USER sentinel
 
-# Shell form so $PORT expands at runtime rather than being taken literally.
-CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT
+# JSON form keeps the shell out of the signal path, and `exec` replaces it with
+# uvicorn as PID 1 -- so a platform SIGTERM on redeploy reaches the server and
+# it shuts down gracefully instead of being killed. The `sh -c` wrapper is what
+# still lets $PORT expand at runtime.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
