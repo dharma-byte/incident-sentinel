@@ -78,6 +78,25 @@ def db_session(engine: Engine) -> Iterator[Session]:
 
 
 @pytest.fixture
+def make_incident(db_session: Session):
+    """Generate a scenario and persist it, returning the stored Incident."""
+    from datetime import datetime, timezone
+
+    from app.db import repository
+    from app.simulator.generator import IncidentGenerator
+    from app.simulator.scenarios import get_scenario
+
+    fixed_start = datetime(2026, 3, 1, 12, 0, tzinfo=timezone.utc)
+
+    def _make(scenario: str = "bad_deploy", *, seed: int = 1337, **kwargs):
+        kwargs.setdefault("start_time", fixed_start)
+        bundle = IncidentGenerator(get_scenario(scenario), seed=seed, **kwargs).generate()
+        return repository.create_incident_from_bundle(db_session, bundle)
+
+    return _make
+
+
+@pytest.fixture
 def client(db_session: Session):
     """TestClient wired to the test database (lifespan is not run)."""
     from fastapi.testclient import TestClient

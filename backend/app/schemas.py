@@ -126,6 +126,24 @@ class TraceStepOut(ORMModel):
     created_at: datetime
 
 
+class TriageRequest(BaseModel):
+    provider: str | None = Field(
+        None, description="override LLM_PROVIDER for this run: groq | ollama | stub"
+    )
+
+
+class TriageResponse(BaseModel):
+    incident_id: uuid.UUID
+    status: str
+    root_cause: str | None = None
+    confidence: float | None = None
+    steps: int = 0
+    candidates: list[dict[str, Any]] = Field(default_factory=list)
+    fix: dict[str, Any] = Field(default_factory=dict)
+    duration_ms: int = 0
+    model: str = ""
+
+
 class TraceResponse(BaseModel):
     incident_id: uuid.UUID
     status: str
@@ -145,4 +163,6 @@ class HealthResponse(BaseModel):
     environment: str
     database: str
     llm_provider: str
+    llm_available: bool = False
+    llm_model: str = ""
     scenarios: int

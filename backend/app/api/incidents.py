@@ -10,15 +10,19 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.agents.orchestrator import triage_incident
 from app.db import repository
 from app.db.models import Incident
 from app.db.session import get_db
+from app.llm.client import LLMError, get_llm_client
 from app.schemas import (
     IncidentDetail,
     IncidentSummary,
     LogOut,
     MetricPointOut,
     TraceResponse,
+    TriageRequest,
+    TriageResponse,
 )
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
@@ -56,6 +60,32 @@ def get_incident(incident_id: uuid.UUID, db: Session = Depends(get_db)) -> Incid
         window_end=incident.window_end,
         **repository.incident_counts(db, incident_id),
     )
+
+
+@router.post("/{incident_id}/triage", response_model=TriageResponse)
+def triage(
+    incident_id: uuid.UUID,
+    payload: TriageRequest | None = None,
+    db: Session = Depends(get_db),
+) -> TriageResponse:
+    """Run the full agent pipeline against the incident.
+
+    Synchronous: the response arrives when the last agent finishes. Phase 4
+    adds an SSE variant that streams each step as it completes.
+    """
+    _load(db, incident_id)
+    llm = get_llm_client(payload.provider if payload else None)
+    if not llm.available():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            f"LLM provider '{llm.name}' is not reachable. Start Ollama (or set GROQ_API_KEY), "
+            f"or pass {{\"provider\": \"stub\"}} to run the pipeline without a model.",
+        )
+    try:
+        result = triage_incident(db, incident_id, llm=llm)
+    except LLMError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"LLM call failed: {exc}") from exc
+    return TriageResponse(**result)
 
 
 @router.get("/{incident_id}/trace", response_model=TraceResponse)
