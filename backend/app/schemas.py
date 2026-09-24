@@ -130,6 +130,9 @@ class TriageRequest(BaseModel):
     provider: str | None = Field(
         None, description="override LLM_PROVIDER for this run: groq | ollama | stub"
     )
+    refresh: bool = Field(
+        False, description="bypass the cache and re-run the pipeline"
+    )
 
 
 class TriageResponse(BaseModel):
@@ -140,8 +143,10 @@ class TriageResponse(BaseModel):
     steps: int = 0
     candidates: list[dict[str, Any]] = Field(default_factory=list)
     fix: dict[str, Any] = Field(default_factory=dict)
+    trace: list[dict[str, Any]] = Field(default_factory=list)
     duration_ms: int = 0
     model: str = ""
+    cached: bool = False
 
 
 class TraceResponse(BaseModel):
@@ -162,6 +167,7 @@ class HealthResponse(BaseModel):
     status: str
     environment: str
     database: str
+    cache: str = "down"
     llm_provider: str
     llm_available: bool = False
     llm_model: str = ""

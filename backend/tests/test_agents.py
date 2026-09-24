@@ -150,9 +150,69 @@ def test_retry_gives_up_and_reports(monkeypatch):
         attempts["n"] += 1
         raise LLMError("boom")
 
-    with pytest.raises(LLMError, match="after 3 attempts"):
+    with pytest.raises(LLMError, match=f"after {llm_module.MAX_ATTEMPTS} attempts"):
         llm_module._retry(always_fails, what="test")
-    assert attempts["n"] == 3
+    assert attempts["n"] == llm_module.MAX_ATTEMPTS
+
+
+def test_token_budget_admits_until_the_window_is_full(monkeypatch):
+    """The budget must pace calls rather than let later agents starve."""
+    import app.llm.client as llm_module
+
+    budget = llm_module.TokenBudget(1000, window_seconds=60.0)
+    assert budget.limit == 900  # 10% safety margin
+
+    assert budget.reserve(500) == 0.0
+    assert budget.reserve(300) == 0.0
+    assert budget.used() == 800
+
+    class Waited(Exception):
+        """Raised from the stubbed sleep so the wait is observable."""
+
+    def fake_sleep(delay: float) -> None:
+        raise Waited(delay)
+
+    monkeypatch.setattr(llm_module.time, "sleep", fake_sleep)
+    # This one does not fit, so it waits for the window to roll instead of
+    # firing a request the server would refuse.
+    with pytest.raises(Waited) as waited:
+        budget.reserve(400)
+    assert 0 < waited.value.args[0] <= 61
+
+
+def test_token_budget_never_deadlocks_on_an_oversized_request():
+    """A single request larger than the whole window still goes through."""
+    import app.llm.client as llm_module
+
+    budget = llm_module.TokenBudget(1000)
+    assert budget.reserve(50_000) == 0.0
+
+
+def test_token_budget_adopts_the_servers_usage_figure():
+    """A 429 tells us the real org-wide usage; trust it over our estimate."""
+    import app.llm.client as llm_module
+
+    budget = llm_module.TokenBudget(8000)
+    budget.reserve(1000)
+    budget.sync(6500)  # the provider counted far more than this process spent
+    assert budget.used() == 6500
+
+    budget.sync(3000)  # a lower figure must not erase what we know
+    assert budget.used() == 6500
+
+
+def test_rate_limit_hints_are_parsed_from_the_error_body():
+    import app.llm.client as llm_module
+
+    detail = (
+        "Rate limit reached for model `openai/gpt-oss-120b` on tokens per minute (TPM): "
+        "Limit 8000, Used 6581, Requested 1497. Please try again in 585ms."
+    )
+    assert llm_module._parse_used_tokens(detail) == 6581
+    assert 0.8 < llm_module._parse_retry_delay(detail, None) < 1.0
+    assert llm_module._parse_retry_delay(detail, "3.5") == 3.5  # header wins
+    assert llm_module._parse_retry_delay("no hint here", None) == 2.0
+    assert llm_module._parse_retry_delay("", "not-a-number") == 2.0
 
 
 # --------------------------------------------------------------------------- #

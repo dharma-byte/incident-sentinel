@@ -18,7 +18,7 @@ from app.llm.prompts import METRICS_CORRELATION_SYSTEM, METRICS_CORRELATION_USER
 
 AGENT_NAME = "metrics_correlation"
 
-MAX_EVIDENCE = 10
+MAX_EVIDENCE = 6
 
 # A metric counts as deviating when it clears both a relative and an absolute
 # bar, so a jittery near-zero baseline cannot manufacture a huge ratio.

@@ -60,6 +60,7 @@ class TriageOrchestrator:
         self.on_step = on_step
         self._evidence_ids: dict[str, uuid.UUID] = {}
         self._step_order = 0
+        self._trace: list[dict[str, Any]] = []
         self.graph = self._build_graph()
 
     # -- graph ----------------------------------------------------------- #
@@ -138,6 +139,7 @@ class TriageOrchestrator:
             duration_ms=output.duration_ms,
         )
         self.db.commit()
+        self._trace.append({**output.to_dict(), "step_order": self._step_order})
         logger.info(
             "step %d/%d %s done in %dms (%d evidence)",
             self._step_order,
@@ -158,6 +160,7 @@ class TriageOrchestrator:
         self._incident: Incident = self._ctx.incident
         self._evidence_ids.clear()
         self._step_order = 0
+        self._trace = []
 
         # A re-run replaces the previous trace rather than appending to it.
         self._clear_previous_trace()
@@ -186,6 +189,7 @@ class TriageOrchestrator:
             "steps": len(AGENT_SEQUENCE),
             "candidates": (diagnosis.findings.get("candidates") if diagnosis else []) or [],
             "fix": (state.get("fix_output").findings if state.get("fix_output") else {}),
+            "trace": self._trace,
             "duration_ms": int((time.perf_counter() - started) * 1000),
             "model": self.llm.model,
         }

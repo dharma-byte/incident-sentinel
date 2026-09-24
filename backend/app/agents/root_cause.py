@@ -26,7 +26,7 @@ from app.llm.prompts import ROOT_CAUSE_SYSTEM, ROOT_CAUSE_USER
 
 AGENT_NAME = "root_cause"
 
-MAX_CANDIDATES = 4
+MAX_CANDIDATES = 3
 
 
 def build_constraints(

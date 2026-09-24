@@ -17,8 +17,8 @@ from app.llm.prompts import LOG_ANALYSIS_SYSTEM, LOG_ANALYSIS_USER
 
 AGENT_NAME = "log_analysis"
 
-MAX_CLUSTERS = 6
-MAX_MARKERS = 8
+MAX_CLUSTERS = 5
+MAX_MARKERS = 6
 SPIKE_RATIO = 3.0  # post/pre error-rate multiple that counts as a spike
 SPIKE_FLOOR = 0.5  # errors per minute below which a ratio is just noise
 

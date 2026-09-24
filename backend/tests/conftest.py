@@ -97,15 +97,23 @@ def make_incident(db_session: Session):
 
 
 @pytest.fixture
-def client(db_session: Session):
+def client(db_session: Session, engine: Engine):
     """TestClient wired to the test database (lifespan is not run)."""
     from fastapi.testclient import TestClient
 
+    import app.api.incidents as incidents_api
     from app.db.session import get_db
     from app.main import app
+
+    # The SSE endpoint opens its own session on a worker thread, which would
+    # otherwise reach the development database rather than the test one.
+    test_factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)
+    original_factory = incidents_api.SessionLocal
+    incidents_api.SessionLocal = test_factory
 
     app.dependency_overrides[get_db] = lambda: db_session
     try:
         yield TestClient(app)
     finally:
         app.dependency_overrides.clear()
+        incidents_api.SessionLocal = original_factory
